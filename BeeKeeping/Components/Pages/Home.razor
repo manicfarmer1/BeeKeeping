@@ -1,0 +1,236 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@using BeeKeeping.Data
+@using BeeKeeping.Data.Models
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<BeeKeepingDbContext> DbFactory
+
+<PageTitle>BeeKeeping Dashboard</PageTitle>
+
+<div class="mb-4">
+    <h1 class="display-5">🐝 BeeKeeping Dashboard</h1>
+    <p class="text-muted">Welcome to your beekeeping management hub. Here's a quick overview of your operation.</p>
+</div>
+
+@if (stats == null)
+{
+    <p>Loading dashboard...</p>
+}
+else
+{
+    <div class="row g-4 mb-4">
+        <div class="col-sm-6 col-lg-3">
+            <a href="hives" class="text-decoration-none">
+                <div class="card text-dark border-warning h-100 shadow-sm">
+                    <div class="card-body d-flex align-items-center gap-3">
+                        <span style="font-size:2.5rem;">🏠</span>
+                        <div>
+                            <div class="fs-2 fw-bold text-warning">@stats.ActiveHives</div>
+                            <div class="text-muted">Active Hives</div>
+                            @if (stats.TotalHives != stats.ActiveHives)
+                            {
+                                <small class="text-secondary">@stats.TotalHives total</small>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-sm-6 col-lg-3">
+            <a href="inspections" class="text-decoration-none">
+                <div class="card text-dark border-info h-100 shadow-sm">
+                    <div class="card-body d-flex align-items-center gap-3">
+                        <span style="font-size:2.5rem;">🔍</span>
+                        <div>
+                            <div class="fs-2 fw-bold text-info">@stats.TotalInspections</div>
+                            <div class="text-muted">Total Inspections</div>
+                            @if (stats.InspectionsThisYear > 0)
+                            {
+                                <small class="text-secondary">@stats.InspectionsThisYear this year</small>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-sm-6 col-lg-3">
+            <a href="equipment" class="text-decoration-none">
+                <div class="card text-dark border-success h-100 shadow-sm">
+                    <div class="card-body d-flex align-items-center gap-3">
+                        <span style="font-size:2.5rem;">🧰</span>
+                        <div>
+                            <div class="fs-2 fw-bold text-success">@stats.EquipmentTypes</div>
+                            <div class="text-muted">Equipment Types</div>
+                            <small class="text-secondary">@stats.TotalEquipmentItems items on hand</small>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-sm-6 col-lg-3">
+            <a href="equipment" class="text-decoration-none">
+                <div class="card text-dark border-primary h-100 shadow-sm">
+                    <div class="card-body d-flex align-items-center gap-3">
+                        <span style="font-size:2.5rem;">💰</span>
+                        <div>
+                            <div class="fs-2 fw-bold text-primary">$@stats.DeductibleSpendThisYear.ToString("N0")</div>
+                            <div class="text-muted">Tax Deductible (@DateTime.Today.Year)</div>
+                            <small class="text-secondary">$@stats.TotalSpendAllTime.ToString("N0") all-time</small>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-warning text-dark d-flex justify-content-between">
+                    <strong>🐝 Hive Status</strong>
+                    <a href="hives" class="btn btn-sm btn-outline-dark">Manage Hives →</a>
+                </div>
+                <div class="card-body p-0">
+                    @if (!stats.HiveSummaries.Any())
+                    {
+                        <p class="p-3 text-muted">No hives yet. <a href="hives">Add your first hive</a>.</p>
+                    }
+                    else
+                    {
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Hive</th>
+                                    <th>Location</th>
+                                    <th>Queen</th>
+                                    <th>Last Inspection</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var h in stats.HiveSummaries)
+                                {
+                                    <tr>
+                                        <td>@h.Name</td>
+                                        <td class="text-muted small">@(string.IsNullOrEmpty(h.Location) ? "—" : h.Location)</td>
+                                        <td>
+                                            <span class="badge @(h.QueenStatus == "Present" ? "bg-success" : h.QueenStatus == "Queenless" ? "bg-danger" : "bg-secondary")">
+                                                @h.QueenStatus
+                                            </span>
+                                        </td>
+                                        <td class="text-muted small">@(h.LastInspection.HasValue ? h.LastInspection.Value.ToString("MMM d, yyyy") : "Never")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-info text-dark d-flex justify-content-between">
+                    <strong>🔍 Recent Inspections</strong>
+                    <a href="inspections" class="btn btn-sm btn-outline-dark">All Inspections →</a>
+                </div>
+                <div class="card-body p-0">
+                    @if (!stats.RecentInspections.Any())
+                    {
+                        <p class="p-3 text-muted">No inspections yet. <a href="inspections">Log your first inspection</a>.</p>
+                    }
+                    else
+                    {
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Hive</th>
+                                    <th>Queen</th>
+                                    <th>Honey</th>
+                                    <th>Pop.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var i in stats.RecentInspections)
+                                {
+                                    <tr>
+                                        <td class="small">@i.InspectionDate.ToString("MMM d")</td>
+                                        <td>@i.Hive?.Name</td>
+                                        <td>@i.QueenSeen</td>
+                                        <td>@i.HoneyStoresRating/5</td>
+                                        <td>@i.PopulationRating/5</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private DashboardStats? stats;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var thisYear = DateTime.Today.Year;
+
+        var hives = await db.Hives.Include(h => h.Inspections).ToListAsync();
+        var equipment = await db.Equipment.ToListAsync();
+        var purchases = await db.EquipmentPurchases.Include(p => p.Items).ToListAsync();
+        var recentInspections = await db.Inspections
+            .Include(i => i.Hive)
+            .OrderByDescending(i => i.InspectionDate)
+            .Take(5)
+            .ToListAsync();
+
+        stats = new DashboardStats
+        {
+            ActiveHives = hives.Count(h => h.IsActive),
+            TotalHives = hives.Count,
+            TotalInspections = hives.Sum(h => h.Inspections.Count),
+            InspectionsThisYear = hives.Sum(h => h.Inspections.Count(i => i.InspectionDate.Year == thisYear)),
+            EquipmentTypes = equipment.Count,
+            TotalEquipmentItems = equipment.Sum(e => e.QuantityOnHand),
+            DeductibleSpendThisYear = purchases.Where(p => p.IsDeductible && p.TaxYear == thisYear).Sum(p => p.TotalCost),
+            TotalSpendAllTime = purchases.Sum(p => p.TotalCost),
+            HiveSummaries = hives.Where(h => h.IsActive).Select(h => new HiveSummary
+            {
+                Name = h.Name,
+                Location = h.Location,
+                QueenStatus = h.QueenStatus,
+                LastInspection = h.Inspections.Any() ? h.Inspections.Max(i => i.InspectionDate) : null
+            }).ToList(),
+            RecentInspections = recentInspections
+        };
+    }
+
+    private class DashboardStats
+    {
+        public int ActiveHives { get; set; }
+        public int TotalHives { get; set; }
+        public int TotalInspections { get; set; }
+        public int InspectionsThisYear { get; set; }
+        public int EquipmentTypes { get; set; }
+        public int TotalEquipmentItems { get; set; }
+        public decimal DeductibleSpendThisYear { get; set; }
+        public decimal TotalSpendAllTime { get; set; }
+        public List<HiveSummary> HiveSummaries { get; set; } = [];
+        public List<Inspection> RecentInspections { get; set; } = [];
+    }
+
+    private class HiveSummary
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Location { get; set; } = string.Empty;
+        public string QueenStatus { get; set; } = string.Empty;
+        public DateTime? LastInspection { get; set; }
+    }
+}
+

@@ -1,0 +1,753 @@
+@page "/equipment"
+@rendermode InteractiveServer
+@using BeeKeeping.Data
+@using BeeKeeping.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Forms
+@inject IDbContextFactory<BeeKeepingDbContext> DbFactory
+@inject IJSRuntime JS
+
+<PageTitle>Equipment & Inventory</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>🧰 Equipment &amp; Inventory</h1>
+    <div>
+        <button class="btn btn-warning me-2" @onclick="ShowAddEquipmentForm">+ Add Equipment</button>
+        <button class="btn btn-outline-warning" @onclick="ShowAddPurchaseForm">+ Log Purchase</button>
+    </div>
+</div>
+
+
+@if (showEquipmentForm)
+{
+    <div class="card mb-4 border-warning">
+        <div class="card-header bg-warning text-dark">
+            <strong>@(editingEquipment.Id == 0 ? "Add Equipment Item" : "Edit Equipment Item")</strong>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Name *</label>
+                    <input class="form-control" @bind="editingEquipment.Name" placeholder="e.g. Langstroth Super" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Category</label>
+                    <select class="form-select" @bind="editingEquipment.Category">
+                        <option value="">-- Select --</option>
+                        <option>Hive Body</option>
+                        <option>Protective Gear</option>
+                        <option>Tools</option>
+                        <option>Feeding</option>
+                        <option>Medications &amp; Treatments</option>
+                        <option>Extraction</option>
+                        <option>Other</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Quantity On Hand</label>
+                    <input class="form-control" type="number" min="0" @bind="editingEquipment.QuantityOnHand" disabled />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Expense Category</label>
+                    <select class="form-select" @bind="editingEquipment.ExpenseCategory">
+                        @foreach (var cat in ExpenseCategories.All)
+                        {
+                            <option value="@cat">@cat</option>
+                        }
+                    </select>
+                    @if (!string.IsNullOrEmpty(editingEquipment.ExpenseCategory))
+                    {
+                        <div class="form-text">@ExpenseCategories.TaxTreatmentNote(editingEquipment.ExpenseCategory)</div>
+                    }
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label">Description</label>
+                    <input class="form-control" @bind="editingEquipment.Description" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Notes</label>
+                    <textarea class="form-control" @bind="editingEquipment.Notes" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="mt-3">
+                <button class="btn btn-success me-2" @onclick="SaveEquipment">Save</button>
+                <button class="btn btn-secondary" @onclick="() => showEquipmentForm = false">Cancel</button>
+            </div>
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger mt-2">@errorMessage</div>
+            }
+        </div>
+    </div>
+}
+
+@if (showPurchaseForm)
+{
+    <div class="card mb-4 border-success">
+    <div class="card-header bg-success text-white">
+        <strong>@(editingPurchase.Id == 0 ? "Log Equipment Purchase" : "Edit Purchase")</strong>
+    </div>
+        <div class="card-body">
+            <div class="row g-3 mb-3">
+                <div class="col-md-3">
+                    <label class="form-label">Purchase Date</label>
+                    <input class="form-control" type="date" @bind="editingPurchase.PurchaseDate" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Tax Year</label>
+                    <input class="form-control" type="number" @bind="editingPurchase.TaxYear" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Vendor</label>
+                    <input class="form-control" @bind="editingPurchase.Vendor" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Receipt #</label>
+                    <input class="form-control" @bind="editingPurchase.ReceiptReference" />
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" @bind="editingPurchase.IsDeductible" id="deductible" />
+                        <label class="form-check-label" for="deductible">Tax Deductible</label>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Notes</label>
+                    <textarea class="form-control" @bind="editingPurchase.Notes" rows="2"></textarea>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Sales Tax ($)</label>
+                    <input class="form-control" type="number" step="0.01" min="0" @bind="editingPurchase.SalesTax" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Shipping ($)</label>
+                    <input class="form-control" type="number" step="0.01" min="0" @bind="editingPurchase.Shipping" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Discount ($)</label>
+                    <input class="form-control" type="number" step="0.01" min="0" @bind="editingPurchase.Discount" />
+                </div>
+            </div>
+
+            <h6 class="fw-bold mb-2">Line Items</h6>
+            <div class="table-responsive mb-2">
+                <table class="table table-sm align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Equipment *</th>
+                            <th style="width:100px">Qty</th>
+                            <th style="width:130px">Unit Price ($)</th>
+                            <th style="width:120px">Line Total</th>
+                            <th style="width:50px"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in editingItems)
+                        {
+                            <tr>
+                                <td>
+                                    <select class="form-select form-select-sm" value="@item.EquipmentId"
+                                            @onchange="e => item.EquipmentId = int.Parse(e.Value!.ToString()!)">
+                                        <option value="0">-- Select --</option>
+                                        @foreach (var eq in equipment ?? [])
+                                        {
+                                            <option value="@eq.Id">@eq.Name</option>
+                                        }
+                                    </select>
+                                </td>
+                                <td>
+                                    <input class="form-control form-control-sm" type="number" min="1"
+                                           @bind="item.Quantity" />
+                                </td>
+                                <td>
+                                    <input class="form-control form-control-sm" type="number" step="0.01" min="0"
+                                           @bind="item.UnitPrice" />
+                                </td>
+                                <td class="fw-bold">$@item.LineTotal.ToString("N2")</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => editingItems.Remove(item)">✕</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr>
+                            <td colspan="3" class="text-end">Subtotal:</td>
+                            <td colspan="2">$@editingItems.Sum(i => i.LineTotal).ToString("N2")</td>
+                        </tr>
+                        @if (editingPurchase.SalesTax > 0)
+                        {
+                            <tr>
+                                <td colspan="3" class="text-end">Sales Tax:</td>
+                                <td colspan="2">$@editingPurchase.SalesTax.ToString("N2")</td>
+                            </tr>
+                        }
+                        @if (editingPurchase.Shipping > 0)
+                        {
+                            <tr>
+                                <td colspan="3" class="text-end">Shipping:</td>
+                                <td colspan="2">$@editingPurchase.Shipping.ToString("N2")</td>
+                            </tr>
+                        }
+                        @if (editingPurchase.Discount > 0)
+                        {
+                            <tr>
+                                <td colspan="3" class="text-end text-danger">Discount:</td>
+                                <td colspan="2" class="text-danger">−$@editingPurchase.Discount.ToString("N2")</td>
+                            </tr>
+                        }
+                        <tr class="fw-bold">
+                            <td colspan="3" class="text-end">Total:</td>
+                            <td colspan="2" class="text-success">$@((editingItems.Sum(i => i.LineTotal) + editingPurchase.SalesTax + editingPurchase.Shipping - editingPurchase.Discount).ToString("N2"))</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <button class="btn btn-outline-success btn-sm mb-3" @onclick="AddLineItem">+ Add Item</button>
+
+            <div class="mt-2">
+                <button class="btn btn-success me-2" @onclick="SavePurchase">Save Purchase</button>
+                <button class="btn btn-secondary" @onclick="() => showPurchaseForm = false">Cancel</button>
+            </div>
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger mt-2">@errorMessage</div>
+            }
+        </div>
+    </div>
+}
+
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <button class="nav-link @(activeTab == "inventory" ? "active" : "")" @onclick=@(() => activeTab = "inventory")>Inventory</button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link @(activeTab == "purchases" ? "active" : "")" @onclick=@(() => activeTab = "purchases")>Purchase History</button>
+    </li>
+</ul>
+
+@if (activeTab == "inventory")
+{
+    @if (equipment == null)
+    {
+        <p>Loading...</p>
+    }
+    else if (!equipment.Any())
+    {
+        <div class="alert alert-info">No equipment recorded yet.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-warning">
+                    <tr>
+                        <th>Name</th>
+                        <th>Category</th>
+                        <th>Expense Category</th>
+                        <th>Qty</th>
+                        <th>Description</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var eq in equipment)
+                    {
+                        <tr>
+                            <td><strong>@eq.Name</strong></td>
+                            <td>@eq.Category</td>
+                            <td><span class="badge bg-secondary">@eq.ExpenseCategory</span></td>
+                            <td><span class="badge bg-warning text-dark">@eq.QuantityOnHand</span></td>
+                            <td class="text-muted small">@eq.Description</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-warning me-1" @onclick="() => EditEquipment(eq)">Edit</button>
+                                <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => StartAdjustment(eq)">Update Inventory</button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteEquipment(eq.Id)">Delete</button>
+                            </td>
+                        </tr>
+                        @if (adjustingEquipmentId == eq.Id)
+                        {
+                            <tr class="table-primary">
+                                <td colspan="6">
+                                    <div class="d-flex align-items-center gap-2 flex-wrap py-1">
+                                        <span class="fw-bold">Adjust Qty for <em>@eq.Name</em>:</span>
+                                        <div class="input-group" style="width:180px">
+                                            <span class="input-group-text">New Qty</span>
+                                            <input class="form-control" type="number" min="0" @bind="adjustQty" />
+                                        </div>
+                                        <input class="form-control" style="max-width:280px" placeholder="Reason (optional)" @bind="adjustNote" />
+                                        <button class="btn btn-sm btn-primary" @onclick="() => SaveInventoryAdjustment(eq.Id)">Save</button>
+                                        <button class="btn btn-sm btn-secondary" @onclick="CancelAdjustment">Cancel</button>
+                                        <span class="text-muted small">Current: @eq.QuantityOnHand</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+else
+{
+    @if (purchases == null)
+    {
+        <p>Loading...</p>
+    }
+    else
+    {
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <label class="form-label mb-0">Filter by Tax Year:</label>
+            <select class="form-select w-auto" @bind="filterYear" @bind:after="FilterPurchases">
+                <option value="0">All Years</option>
+                @foreach (var year in purchases.Select(p => p.TaxYear).Distinct().OrderByDescending(y => y))
+                {
+                    <option value="@year">@year</option>
+                }
+            </select>
+            @if (filteredPurchases != null)
+            {
+                <span class="ms-auto fw-bold">
+                    Total (deductible): <span class="text-success">$@filteredPurchases.Where(p => p.IsDeductible).Sum(p => p.TotalCost).ToString("N2")</span>
+                </span>
+            }
+        </div>
+
+        @if (filteredPurchases == null || !filteredPurchases.Any())
+        {
+            <div class="alert alert-info">No purchases recorded.</div>
+        }
+        else
+        {
+            @foreach (var p in filteredPurchases.OrderByDescending(p => p.PurchaseDate))
+            {
+                <div class="card mb-3 border-success-subtle">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>@p.PurchaseDate.ToString("MMM d, yyyy")</strong>
+                            <span class="ms-3 text-muted">@p.Vendor</span>
+                            @if (!string.IsNullOrEmpty(p.ReceiptReference))
+                            {
+                                <span class="ms-2 badge bg-secondary">Receipt: @p.ReceiptReference</span>
+                            }
+                            <span class="ms-2 badge bg-info text-dark">@p.TaxYear</span>
+                            @if (p.IsDeductible)
+                            {
+                                <span class="ms-1 badge bg-success">Deductible</span>
+                            }
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <strong class="text-success">$@p.TotalCost.ToString("N2")</strong>
+                            <button class="btn btn-sm btn-outline-warning" @onclick="() => EditPurchase(p)">Edit</button>
+                            @if (pendingDeletePurchaseId == p.Id)
+                            {
+                                <span class="text-danger small fw-bold">Delete?</span>
+                                <button class="btn btn-sm btn-danger" @onclick="() => ConfirmDeletePurchase(p.Id)">Yes</button>
+                                <button class="btn btn-sm btn-secondary" @onclick="() => pendingDeletePurchaseId = null">No</button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => pendingDeletePurchaseId = p.Id">Delete</button>
+                            }
+                        </div>
+                    </div>
+                    <div class="card-body p-2">
+                        @if (!string.IsNullOrEmpty(p.Notes))
+                        {
+                            <p class="text-muted small mb-2">@p.Notes</p>
+                        }
+                        <table class="table table-sm mb-2">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Equipment</th>
+                                    <th>Expense Category</th>
+                                    <th>Qty</th>
+                                    <th>Unit Price</th>
+                                    <th>Line Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in p.Items)
+                                {
+                                    <tr>
+                                        <td>@item.Equipment?.Name</td>
+                                        <td><span class="badge bg-secondary">@item.Equipment?.ExpenseCategory</span></td>
+                                        <td>@item.Quantity</td>
+                                        <td>$@item.UnitPrice.ToString("N2")</td>
+                                        <td class="fw-bold">$@item.LineTotal.ToString("N2")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr>
+                                    <td colspan="4" class="text-end">Subtotal:</td>
+                                    <td>$@p.Subtotal.ToString("N2")</td>
+                                </tr>
+                                @if (p.SalesTax > 0)
+                                {
+                                    <tr>
+                                        <td colspan="4" class="text-end">Sales Tax:</td>
+                                        <td>$@p.SalesTax.ToString("N2")</td>
+                                    </tr>
+                                }
+                                @if (p.Shipping > 0)
+                                {
+                                    <tr>
+                                        <td colspan="4" class="text-end">Shipping:</td>
+                                        <td>$@p.Shipping.ToString("N2")</td>
+                                    </tr>
+                                }
+                                @if (p.Discount > 0)
+                                {
+                                    <tr>
+                                        <td colspan="4" class="text-end text-danger">Discount:</td>
+                                        <td class="text-danger">−$@p.Discount.ToString("N2")</td>
+                                    </tr>
+                                }
+                                <tr class="fw-bold">
+                                    <td colspan="4" class="text-end">Total:</td>
+                                    <td class="text-success">$@p.TotalCost.ToString("N2")</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            @if (p.Attachments.Any())
+                            {
+                                @foreach (var att in p.Attachments)
+                                {
+                                    <div class="d-flex align-items-center gap-1">
+                                        <button class="btn btn-sm btn-outline-primary"
+                                                title="@att.FileName (@FormatFileSize(att.FileSize))"
+                                                @onclick="() => DownloadAttachment(att)">
+                                            📎 @att.FileName
+                                        </button>
+                                        @if (pendingDeleteAttachmentId == att.Id)
+                                        {
+                                            <span class="text-danger small fw-bold me-1">Remove?</span>
+                                            <button class="btn btn-sm btn-danger" @onclick="() => ConfirmDeleteAttachment(att.Id)">Yes</button>
+                                            <button class="btn btn-sm btn-secondary" @onclick="CancelDeleteAttachment">No</button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-sm btn-outline-danger"
+                                                    title="Remove attachment"
+                                                    @onclick="() => pendingDeleteAttachmentId = att.Id">✕</button>
+                                        }
+                                    </div>
+                                }
+                            }
+                            <InputFile OnChange="e => HandleFileSelected(e, p.Id)"
+                                       accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.heic,.doc,.docx,.xls,.xlsx"
+                                       class="form-control form-control-sm"
+                                       style="max-width:220px" />
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    }
+}
+
+@code {
+    private List<Equipment>? equipment;
+    private List<EquipmentPurchase>? purchases;
+    private List<EquipmentPurchase>? filteredPurchases;
+    private Equipment editingEquipment = new();
+    private EquipmentPurchase editingPurchase = new();
+    private List<EquipmentPurchaseItem> editingItems = [];
+    private bool showEquipmentForm;
+    private bool showPurchaseForm;
+    private string activeTab = "inventory";
+    private string errorMessage = string.Empty;
+    private int filterYear = 0;
+    private int? pendingDeleteAttachmentId;
+    private int? pendingDeletePurchaseId;
+    private int? adjustingEquipmentId;
+    private int adjustQty;
+    private string adjustNote = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        equipment = await db.Equipment.OrderBy(e => e.Category).ThenBy(e => e.Name).ToListAsync();
+        purchases = await db.EquipmentPurchases
+            .Include(p => p.Items).ThenInclude(i => i.Equipment)
+            .Include(p => p.Attachments)
+            .ToListAsync();
+        FilterPurchases();
+    }
+
+    private void FilterPurchases()
+    {
+        filteredPurchases = filterYear == 0
+            ? purchases
+            : purchases?.Where(p => p.TaxYear == filterYear).ToList();
+    }
+
+    private void ShowAddEquipmentForm()
+    {
+        editingEquipment = new Equipment();
+        errorMessage = string.Empty;
+        showEquipmentForm = true;
+    }
+
+    private void EditEquipment(Equipment eq)
+    {
+        editingEquipment = new Equipment
+        {
+            Id = eq.Id,
+            Name = eq.Name,
+            Category = eq.Category,
+            Description = eq.Description,
+            QuantityOnHand = eq.QuantityOnHand,
+            Notes = eq.Notes,
+            ExpenseCategory = eq.ExpenseCategory
+        };
+        errorMessage = string.Empty;
+        showEquipmentForm = true;
+    }
+
+    private async Task SaveEquipment()
+    {
+        if (string.IsNullOrWhiteSpace(editingEquipment.Name))
+        {
+            errorMessage = "Equipment name is required.";
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (editingEquipment.Id == 0)
+        {
+            db.Equipment.Add(editingEquipment);
+        }
+        else
+        {
+            var existing = await db.Equipment.FindAsync(editingEquipment.Id);
+            if (existing != null)
+            {
+                existing.Name = editingEquipment.Name;
+                existing.Category = editingEquipment.Category;
+                existing.Description = editingEquipment.Description;
+                existing.Notes = editingEquipment.Notes;
+                existing.ExpenseCategory = editingEquipment.ExpenseCategory;
+            }
+        }
+        await db.SaveChangesAsync();
+        showEquipmentForm = false;
+        await LoadData();
+    }
+
+    private async Task DeleteEquipment(int id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var eq = await db.Equipment.FindAsync(id);
+        if (eq != null) { db.Equipment.Remove(eq); await db.SaveChangesAsync(); }
+        await LoadData();
+    }
+
+    private void StartAdjustment(Equipment eq)
+    {
+        adjustingEquipmentId = eq.Id;
+        adjustQty = eq.QuantityOnHand;
+        adjustNote = string.Empty;
+    }
+
+    private void CancelAdjustment()
+    {
+        adjustingEquipmentId = null;
+        adjustNote = string.Empty;
+    }
+
+    private async Task SaveInventoryAdjustment(int equipmentId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var eq = await db.Equipment.FindAsync(equipmentId);
+        if (eq != null)
+        {
+            eq.QuantityOnHand = adjustQty;
+            await db.SaveChangesAsync();
+        }
+        adjustingEquipmentId = null;
+        adjustNote = string.Empty;
+        await LoadData();
+    }
+
+    private void ShowAddPurchaseForm()
+    {
+        editingPurchase = new EquipmentPurchase
+        {
+            PurchaseDate = DateOnly.FromDateTime(DateTime.Today),
+            TaxYear = DateTime.Today.Year,
+            IsDeductible = true
+        };
+        editingItems = [new EquipmentPurchaseItem { Quantity = 1 }];
+        errorMessage = string.Empty;
+        showPurchaseForm = true;
+    }
+
+    private void EditPurchase(EquipmentPurchase p)
+    {
+        editingPurchase = new EquipmentPurchase
+        {
+            Id = p.Id,
+            PurchaseDate = p.PurchaseDate,
+            TaxYear = p.TaxYear,
+            Vendor = p.Vendor,
+            ReceiptReference = p.ReceiptReference,
+            IsDeductible = p.IsDeductible,
+            Notes = p.Notes,
+            Shipping = p.Shipping,
+            Discount = p.Discount,
+            SalesTax = p.SalesTax
+        };
+        editingItems = p.Items.Select(i => new EquipmentPurchaseItem
+        {
+            Id = i.Id,
+            EquipmentPurchaseId = i.EquipmentPurchaseId,
+            EquipmentId = i.EquipmentId,
+            Quantity = i.Quantity,
+            UnitPrice = i.UnitPrice
+        }).ToList();
+        errorMessage = string.Empty;
+        showPurchaseForm = true;
+    }
+
+    private void AddLineItem()
+    {
+        editingItems.Add(new EquipmentPurchaseItem { Quantity = 1 });
+    }
+
+    private async Task SavePurchase()
+    {
+        if (!editingItems.Any())
+        {
+            errorMessage = "Add at least one line item.";
+            return;
+        }
+        if (editingItems.Any(i => i.EquipmentId == 0))
+        {
+            errorMessage = "Please select equipment for each line item.";
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        if (editingPurchase.Id == 0)
+        {
+            editingPurchase.Items = editingItems;
+            db.EquipmentPurchases.Add(editingPurchase);
+            foreach (var item in editingItems)
+            {
+                var eq = await db.Equipment.FindAsync(item.EquipmentId);
+                if (eq != null) eq.QuantityOnHand += item.Quantity;
+            }
+        }
+        else
+        {
+            var existing = await db.EquipmentPurchases
+                .Include(p => p.Items)
+                .FirstAsync(p => p.Id == editingPurchase.Id);
+
+            existing.PurchaseDate = editingPurchase.PurchaseDate;
+            existing.TaxYear = editingPurchase.TaxYear;
+            existing.Vendor = editingPurchase.Vendor;
+            existing.ReceiptReference = editingPurchase.ReceiptReference;
+            existing.IsDeductible = editingPurchase.IsDeductible;
+            existing.Notes = editingPurchase.Notes;
+            existing.SalesTax = editingPurchase.SalesTax;
+            existing.Shipping = editingPurchase.Shipping;
+            existing.Discount = editingPurchase.Discount;
+
+            // Reverse old item quantities from inventory
+            foreach (var old in existing.Items)
+            {
+                var eq = await db.Equipment.FindAsync(old.EquipmentId);
+                if (eq != null) eq.QuantityOnHand -= old.Quantity;
+            }
+
+            // Replace line items
+            db.EquipmentPurchaseItems.RemoveRange(existing.Items);
+            existing.Items.Clear();
+
+            foreach (var item in editingItems)
+            {
+                item.Id = 0;
+                item.EquipmentPurchaseId = existing.Id;
+                existing.Items.Add(item);
+                var eq = await db.Equipment.FindAsync(item.EquipmentId);
+                if (eq != null) eq.QuantityOnHand += item.Quantity;
+            }
+        }
+
+        await db.SaveChangesAsync();
+        showPurchaseForm = false;
+        await LoadData();
+    }
+
+    private async Task ConfirmDeletePurchase(int id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var p = await db.EquipmentPurchases.FindAsync(id);
+        if (p != null) { db.EquipmentPurchases.Remove(p); await db.SaveChangesAsync(); }
+        pendingDeletePurchaseId = null;
+        await LoadData();
+    }
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e, int purchaseId)
+    {
+        const long maxSize = 20 * 1024 * 1024;
+        foreach (var file in e.GetMultipleFiles(10))
+        {
+            await using var stream = file.OpenReadStream(maxSize);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+
+            var attachment = new PurchaseAttachment
+            {
+                EquipmentPurchaseId = purchaseId,
+                FileName = file.Name,
+                ContentType = file.ContentType,
+                FileSize = file.Size,
+                FileData = ms.ToArray(),
+                UploadedAt = DateTime.UtcNow
+            };
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+            db.PurchaseAttachments.Add(attachment);
+            await db.SaveChangesAsync();
+        }
+        await LoadData();
+    }
+
+    private async Task DownloadAttachment(PurchaseAttachment att)
+    {
+        var base64 = Convert.ToBase64String(att.FileData);
+        await JS.InvokeVoidAsync("downloadFileFromBase64", att.FileName, att.ContentType, base64);
+    }
+
+    private async Task ConfirmDeleteAttachment(int id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var att = await db.PurchaseAttachments.FindAsync(id);
+        if (att != null) { db.PurchaseAttachments.Remove(att); await db.SaveChangesAsync(); }
+        pendingDeleteAttachmentId = null;
+        await LoadData();
+    }
+
+    private void CancelDeleteAttachment()
+    {
+        pendingDeleteAttachmentId = null;
+    }
+
+    private static string FormatFileSize(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:N1} KB",
+        _ => $"{bytes / (1024.0 * 1024):N1} MB"
+    };
+}

@@ -1,0 +1,196 @@
+@page "/hives"
+@rendermode InteractiveServer
+@using BeeKeeping.Data
+@using BeeKeeping.Data.Models
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<BeeKeepingDbContext> DbFactory
+
+<PageTitle>Hive Management</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>🐝 Hive Management</h1>
+    <button class="btn btn-warning" @onclick="ShowAddForm">+ Add Hive</button>
+</div>
+
+@if (showForm)
+{
+    <div class="card mb-4 border-warning">
+        <div class="card-header bg-warning text-dark">
+            <strong>@(editingHive.Id == 0 ? "Add New Hive" : "Edit Hive")</strong>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Hive Name *</label>
+                    <input class="form-control" @bind="editingHive.Name" placeholder="e.g. Hive #1" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Location</label>
+                    <input class="form-control" @bind="editingHive.Location" placeholder="e.g. Back yard - east" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Established Date</label>
+                    <input class="form-control" type="date" @bind="editingHive.EstablishedDate" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Bee Breed</label>
+                    <input class="form-control" @bind="editingHive.BeeBreed" placeholder="e.g. Italian, Carniolan" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Queen Status</label>
+                    <select class="form-select" @bind="editingHive.QueenStatus">
+                        <option>Unknown</option>
+                        <option>Present</option>
+                        <option>Queenless</option>
+                        <option>Queen Cell</option>
+                        <option>New Queen</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Status</label>
+                    <select class="form-select" @bind="editingHive.IsActive">
+                        <option value="true">Active</option>
+                        <option value="false">Inactive</option>
+                    </select>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Notes</label>
+                    <textarea class="form-control" @bind="editingHive.Notes" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="mt-3">
+                <button class="btn btn-success me-2" @onclick="SaveHive">Save</button>
+                <button class="btn btn-secondary" @onclick="CancelForm">Cancel</button>
+            </div>
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger mt-2">@errorMessage</div>
+            }
+        </div>
+    </div>
+}
+
+@if (hives == null)
+{
+    <p>Loading...</p>
+}
+else if (!hives.Any())
+{
+    <div class="alert alert-info">No hives recorded yet. Add your first hive!</div>
+}
+else
+{
+    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
+        @foreach (var hive in hives)
+        {
+            <div class="col">
+                <div class="card h-100 @(hive.IsActive ? "border-warning" : "border-secondary")">
+                    <div class="card-header d-flex justify-content-between @(hive.IsActive ? "bg-warning text-dark" : "bg-secondary text-white")">
+                        <strong>@hive.Name</strong>
+                        <span class="badge @(hive.IsActive ? "bg-success" : "bg-dark")">@(hive.IsActive ? "Active" : "Inactive")</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-1"><strong>📍 Location:</strong> @(string.IsNullOrEmpty(hive.Location) ? "—" : hive.Location)</p>
+                        <p class="mb-1"><strong>📅 Established:</strong> @hive.EstablishedDate.ToString("MMM d, yyyy")</p>
+                        <p class="mb-1"><strong>🐝 Breed:</strong> @(string.IsNullOrEmpty(hive.BeeBreed) ? "—" : hive.BeeBreed)</p>
+                        <p class="mb-1"><strong>👑 Queen:</strong> @hive.QueenStatus</p>
+                        <p class="mb-1"><strong>🔍 Inspections:</strong> @hive.Inspections.Count</p>
+                        @if (!string.IsNullOrEmpty(hive.Notes))
+                        {
+                            <p class="mb-1 text-muted small">@hive.Notes</p>
+                        }
+                    </div>
+                    <div class="card-footer d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-warning" @onclick="() => EditHive(hive)">Edit</button>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteHive(hive.Id)">Delete</button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<Hive>? hives;
+    private Hive editingHive = new();
+    private bool showForm;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync() => await LoadHives();
+
+    private async Task LoadHives()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        hives = await db.Hives.Include(h => h.Inspections).OrderBy(h => h.Name).ToListAsync();
+    }
+
+    private void ShowAddForm()
+    {
+        editingHive = new Hive { EstablishedDate = DateOnly.FromDateTime(DateTime.Today) };
+        errorMessage = string.Empty;
+        showForm = true;
+    }
+
+    private void EditHive(Hive hive)
+    {
+        editingHive = new Hive
+        {
+            Id = hive.Id,
+            Name = hive.Name,
+            Location = hive.Location,
+            EstablishedDate = hive.EstablishedDate,
+            BeeBreed = hive.BeeBreed,
+            QueenStatus = hive.QueenStatus,
+            IsActive = hive.IsActive,
+            Notes = hive.Notes
+        };
+        errorMessage = string.Empty;
+        showForm = true;
+    }
+
+    private async Task SaveHive()
+    {
+        if (string.IsNullOrWhiteSpace(editingHive.Name))
+        {
+            errorMessage = "Hive name is required.";
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (editingHive.Id == 0)
+        {
+            db.Hives.Add(editingHive);
+        }
+        else
+        {
+            var existing = await db.Hives.FindAsync(editingHive.Id);
+            if (existing != null)
+            {
+                existing.Name = editingHive.Name;
+                existing.Location = editingHive.Location;
+                existing.EstablishedDate = editingHive.EstablishedDate;
+                existing.BeeBreed = editingHive.BeeBreed;
+                existing.QueenStatus = editingHive.QueenStatus;
+                existing.IsActive = editingHive.IsActive;
+                existing.Notes = editingHive.Notes;
+            }
+        }
+        await db.SaveChangesAsync();
+        showForm = false;
+        await LoadHives();
+    }
+
+    private async Task DeleteHive(int id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var hive = await db.Hives.FindAsync(id);
+        if (hive != null)
+        {
+            db.Hives.Remove(hive);
+            await db.SaveChangesAsync();
+        }
+        await LoadHives();
+    }
+
+    private void CancelForm() => showForm = false;
+}

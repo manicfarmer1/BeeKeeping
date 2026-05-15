@@ -1,0 +1,22 @@
+services:
+  beekeeping:
+    image: 192.168.1.105:15000/beekeeping:latest
+    container_name: beekeeping
+    restart: unless-stopped
+    ports:
+      # Host port 8080 → container port 8080
+      # Change the host port (left side) if 8080 is already in use on your NAS
+      - "18085:8080"
+    volumes:
+      # Bind-mount to the /Databases share on the NAS.
+      # The beekeeping.db file will be written directly to that share.
+      - /share/Databases:/data
+    environment:
+      - DATA_PATH=/data
+      - ASPNETCORE_ENVIRONMENT=Production
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://192.168.1.105:18085 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

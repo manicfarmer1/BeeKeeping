@@ -1,0 +1,33 @@
+# Build outputs
+**/bin/
+**/obj/
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Visual Studio
+.vs/
+**/*.user
+**/*.suo
+**/*.userosscache
+**/*.sln.docstates
+
+# Rider / JetBrains
+.idea/
+
+# Logs & local SQLite DB (never bake the dev DB into the image)
+*.db
+*.db-shm
+*.db-wal
+Logs/
+
+# Docker files (no need to copy into themselves)
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Docs / misc
+README.md
+*.md
