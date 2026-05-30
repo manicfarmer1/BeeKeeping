@@ -16,7 +16,7 @@
 {
     <div class="card mb-4 border-warning">
         <div class="card-header bg-warning text-dark">
-            <strong>Log Inspection</strong>
+            <strong>@(editingInspection.Id == 0 ? "Log Inspection" : "Edit Inspection")</strong>
         </div>
         <div class="card-body">
             <div class="row g-3">
@@ -148,24 +148,25 @@ else if (!filteredInspections.Any())
 }
 else
 {
-    <div class="accordion" id="inspectionAccordion">
+    <div>
         @foreach (var inspection in filteredInspections.OrderByDescending(i => i.InspectionDate))
         {
-            var collapseId = $"collapse-{inspection.Id}";
-            var headingId = $"heading-{inspection.Id}";
-            <div class="accordion-item mb-2 border rounded">
-                <h2 class="accordion-header" id="@headingId">
-                    <button class="accordion-button collapsed" type="button"
-                            data-bs-toggle="collapse" data-bs-target="#@collapseId">
-                        <span class="me-3"><strong>@inspection.Hive?.Name</strong></span>
+            var isOpen = expandedIds.Contains(inspection.Id);
+            <div class="card mb-2">
+                <div class="card-header p-0">
+                    <button class="btn btn-link text-start w-100 text-decoration-none px-3 py-2"
+                            @onclick="() => ToggleExpanded(inspection.Id)">
+                        <span class="me-2">@(isOpen ? "▲" : "▼")</span>
+                        <strong class="me-3">@inspection.Hive?.Name</strong>
                         <span class="me-3 text-muted">@inspection.InspectionDate.ToString("MMM d, yyyy h:mm tt")</span>
                         <span class="badge bg-warning text-dark me-2">👑 @inspection.QueenSeen</span>
                         <span class="badge bg-info text-dark me-2">🍯 @inspection.HoneyStoresRating/5</span>
                         <span class="badge bg-secondary">👥 @inspection.PopulationRating/5</span>
                     </button>
-                </h2>
-                <div id="@collapseId" class="accordion-collapse collapse" data-bs-parent="#inspectionAccordion">
-                    <div class="accordion-body">
+                </div>
+                @if (isOpen)
+                {
+                    <div class="card-body">
                         <div class="row g-2">
                             <div class="col-md-3"><strong>Inspector:</strong> @inspection.Inspector</div>
                             <div class="col-md-3"><strong>Temperament:</strong> @inspection.TemperamentRating</div>
@@ -192,10 +193,11 @@ else
                             }
                         </div>
                         <div class="mt-2">
+                            <button class="btn btn-sm btn-outline-primary me-2" @onclick="() => EditInspection(inspection)">Edit</button>
                             <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteInspection(inspection.Id)">Delete</button>
                         </div>
                     </div>
-                </div>
+                }
             </div>
         }
     </div>
@@ -209,6 +211,13 @@ else
     private bool showForm;
     private string errorMessage = string.Empty;
     private int filterHiveId = 0;
+    private HashSet<int> expandedIds = new();
+
+    private void ToggleExpanded(int id)
+    {
+        if (!expandedIds.Add(id))
+            expandedIds.Remove(id);
+    }
 
     protected override async Task OnInitializedAsync() => await LoadData();
 
@@ -239,6 +248,33 @@ else
         showForm = true;
     }
 
+    private void EditInspection(Inspection inspection)
+    {
+        editingInspection = new Inspection
+        {
+            Id = inspection.Id,
+            HiveId = inspection.HiveId,
+            InspectionDate = inspection.InspectionDate,
+            Inspector = inspection.Inspector,
+            QueenSeen = inspection.QueenSeen,
+            EggsSeen = inspection.EggsSeen,
+            LarvaeSeen = inspection.LarvaeSeen,
+            BroodPattern = inspection.BroodPattern,
+            HoneyStoresRating = inspection.HoneyStoresRating,
+            PopulationRating = inspection.PopulationRating,
+            TemperamentRating = inspection.TemperamentRating,
+            VarroaMiteCheck = inspection.VarroaMiteCheck,
+            VarroaMiteCount = inspection.VarroaMiteCount,
+            Treatments = inspection.Treatments,
+            ActionsTaken = inspection.ActionsTaken,
+            NextSteps = inspection.NextSteps,
+            Notes = inspection.Notes,
+            WeatherConditions = inspection.WeatherConditions
+        };
+        errorMessage = string.Empty;
+        showForm = true;
+    }
+
     private async Task SaveInspection()
     {
         if (editingInspection.HiveId == 0)
@@ -247,7 +283,35 @@ else
             return;
         }
         await using var db = await DbFactory.CreateDbContextAsync();
-        db.Inspections.Add(editingInspection);
+
+        if (editingInspection.Id == 0)
+        {
+            db.Inspections.Add(editingInspection);
+        }
+        else
+        {
+            var existing = await db.Inspections.FindAsync(editingInspection.Id);
+            if (existing != null)
+            {
+                existing.HiveId = editingInspection.HiveId;
+                existing.InspectionDate = editingInspection.InspectionDate;
+                existing.Inspector = editingInspection.Inspector;
+                existing.QueenSeen = editingInspection.QueenSeen;
+                existing.EggsSeen = editingInspection.EggsSeen;
+                existing.LarvaeSeen = editingInspection.LarvaeSeen;
+                existing.BroodPattern = editingInspection.BroodPattern;
+                existing.HoneyStoresRating = editingInspection.HoneyStoresRating;
+                existing.PopulationRating = editingInspection.PopulationRating;
+                existing.TemperamentRating = editingInspection.TemperamentRating;
+                existing.VarroaMiteCheck = editingInspection.VarroaMiteCheck;
+                existing.VarroaMiteCount = editingInspection.VarroaMiteCount;
+                existing.Treatments = editingInspection.Treatments;
+                existing.ActionsTaken = editingInspection.ActionsTaken;
+                existing.NextSteps = editingInspection.NextSteps;
+                existing.Notes = editingInspection.Notes;
+                existing.WeatherConditions = editingInspection.WeatherConditions;
+            }
+        }
 
         var hive = await db.Hives.FindAsync(editingInspection.HiveId);
         if (hive != null && editingInspection.QueenSeen == "Yes")
