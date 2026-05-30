@@ -9,6 +9,26 @@
 
 <PageTitle>Equipment & Inventory</PageTitle>
 
+@if (showDeleteConfirm)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Delete</h5>
+                </div>
+                <div class="modal-body">
+                    <p>@confirmMessage</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+                    <button class="btn btn-danger" @onclick="ExecuteDelete">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1>🧰 Equipment &amp; Inventory</h1>
     <div>
@@ -253,6 +273,7 @@
                 <tbody>
                     @foreach (var eq in equipment)
                     {
+                        var deleteMsg = "Delete equipment " + eq.Name + "? This cannot be undone.";
                         <tr>
                             <td><strong>@eq.Name</strong></td>
                             <td>@eq.Category</td>
@@ -262,7 +283,7 @@
                             <td>
                                 <button class="btn btn-sm btn-outline-warning me-1" @onclick="() => EditEquipment(eq)">Edit</button>
                                 <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => StartAdjustment(eq)">Update Inventory</button>
-                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteEquipment(eq.Id)">Delete</button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => PromptDelete(eq.Id, deleteMsg)">Delete</button>
                             </td>
                         </tr>
                         @if (adjustingEquipmentId == eq.Id)
@@ -466,6 +487,29 @@ else
     private int? adjustingEquipmentId;
     private int adjustQty;
     private string adjustNote = string.Empty;
+    private bool showDeleteConfirm;
+    private string confirmMessage = string.Empty;
+    private int pendingDeleteId;
+
+    private void PromptDelete(int id, string message)
+    {
+        pendingDeleteId = id;
+        confirmMessage = message;
+        showDeleteConfirm = true;
+    }
+
+    private void CancelDelete()
+    {
+        showDeleteConfirm = false;
+        pendingDeleteId = 0;
+    }
+
+    private async Task ExecuteDelete()
+    {
+        showDeleteConfirm = false;
+        await DeleteEquipment(pendingDeleteId);
+        pendingDeleteId = 0;
+    }
 
     protected override async Task OnInitializedAsync()
     {

@@ -7,6 +7,26 @@
 
 <PageTitle>Hive Management</PageTitle>
 
+@if (showDeleteConfirm)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Delete</h5>
+                </div>
+                <div class="modal-body">
+                    <p>@confirmMessage</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+                    <button class="btn btn-danger" @onclick="ExecuteDelete">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1>🐝 Hive Management</h1>
     <button class="btn btn-warning" @onclick="ShowAddForm">+ Add Hive</button>
@@ -83,6 +103,7 @@ else
     <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
         @foreach (var hive in hives)
         {
+            var deleteMsg = "Delete hive " + hive.Name + "? This cannot be undone.";
             <div class="col">
                 <div class="card h-100 @(hive.IsActive ? "border-warning" : "border-secondary")">
                     <div class="card-header d-flex justify-content-between @(hive.IsActive ? "bg-warning text-dark" : "bg-secondary text-white")">
@@ -102,7 +123,7 @@ else
                     </div>
                     <div class="card-footer d-flex gap-2">
                         <button class="btn btn-sm btn-outline-warning" @onclick="() => EditHive(hive)">Edit</button>
-                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteHive(hive.Id)">Delete</button>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => PromptDelete(hive.Id, deleteMsg)">Delete</button>
                     </div>
                 </div>
             </div>
@@ -115,6 +136,29 @@ else
     private Hive editingHive = new();
     private bool showForm;
     private string errorMessage = string.Empty;
+    private bool showDeleteConfirm;
+    private string confirmMessage = string.Empty;
+    private int pendingDeleteId;
+
+    private void PromptDelete(int id, string message)
+    {
+        pendingDeleteId = id;
+        confirmMessage = message;
+        showDeleteConfirm = true;
+    }
+
+    private void CancelDelete()
+    {
+        showDeleteConfirm = false;
+        pendingDeleteId = 0;
+    }
+
+    private async Task ExecuteDelete()
+    {
+        showDeleteConfirm = false;
+        await DeleteHive(pendingDeleteId);
+        pendingDeleteId = 0;
+    }
 
     protected override async Task OnInitializedAsync() => await LoadHives();
 

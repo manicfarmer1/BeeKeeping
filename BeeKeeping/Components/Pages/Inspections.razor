@@ -7,6 +7,26 @@
 
 <PageTitle>Hive Inspections</PageTitle>
 
+@if (showDeleteConfirm)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Delete</h5>
+                </div>
+                <div class="modal-body">
+                    <p>@confirmMessage</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+                    <button class="btn btn-danger" @onclick="ExecuteDelete">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1>🔍 Hive Inspections</h1>
     <button class="btn btn-warning" @onclick="ShowAddForm">+ Log Inspection</button>
@@ -152,6 +172,7 @@ else
         @foreach (var inspection in filteredInspections.OrderByDescending(i => i.InspectionDate))
         {
             var isOpen = expandedIds.Contains(inspection.Id);
+                var deleteMsg = "Delete inspection for " + (inspection.Hive?.Name ?? "") + " on " + inspection.InspectionDate.ToString("MMM d, yyyy") + "?";
             <div class="card mb-2">
                 <div class="card-header p-0">
                     <button class="btn btn-link text-start w-100 text-decoration-none px-3 py-2"
@@ -194,7 +215,7 @@ else
                         </div>
                         <div class="mt-2">
                             <button class="btn btn-sm btn-outline-primary me-2" @onclick="() => EditInspection(inspection)">Edit</button>
-                            <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteInspection(inspection.Id)">Delete</button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => PromptDelete(inspection.Id, deleteMsg)">Delete</button>
                         </div>
                     </div>
                 }
@@ -322,6 +343,30 @@ else
         await db.SaveChangesAsync();
         showForm = false;
         await LoadData();
+    }
+
+    private bool showDeleteConfirm;
+    private string confirmMessage = string.Empty;
+    private int pendingDeleteId;
+
+    private void PromptDelete(int id, string message)
+    {
+        pendingDeleteId = id;
+        confirmMessage = message;
+        showDeleteConfirm = true;
+    }
+
+    private void CancelDelete()
+    {
+        showDeleteConfirm = false;
+        pendingDeleteId = 0;
+    }
+
+    private async Task ExecuteDelete()
+    {
+        showDeleteConfirm = false;
+        await DeleteInspection(pendingDeleteId);
+        pendingDeleteId = 0;
     }
 
     private async Task DeleteInspection(int id)
